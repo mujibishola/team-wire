@@ -1,0 +1,5 @@
+{
+  "name": "team-wire",
+  "owner": { "name": "Mujib Ishola", "url": "https://github.com/mujibishola" },
+  "plugins": [{ "name": "team-wire", "source": "./", "description": "Watch a Claude Code agent team at work as a map, an office or a factory" }]
+}

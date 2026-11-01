@@ -1,0 +1,11 @@
+{
+  "name": "team-wire",
+  "version": "0.1.0",
+  "description": "Watch a Claude Code agent team at work: a live map, office or factory of who is doing what, where issues wait, and what went wrong",
+  "author": { "name": "Mujib Ishola", "url": "https://github.com/mujibishola" },
+  "homepage": "https://github.com/mujibishola/team-wire",
+  "repository": "https://github.com/mujibishola/team-wire",
+  "license": "MIT",
+  "keywords": ["agent-teams", "dashboard", "tmux", "mod"],
+  "types": "./types/index.d.ts"
+}
