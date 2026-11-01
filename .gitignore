@@ -1,3 +1,5 @@
 # Written by Claude Code when it loads the mod.
 .claude-plugin/types/
 __pycache__/
+# Compiled output of a type-check run
+*.js
