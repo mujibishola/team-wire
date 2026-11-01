@@ -7,7 +7,7 @@ import type { Filter, Hit, Timeline } from './dashboard'
 import { DEFAULT_LINE, configure, dur, initials, issueUrlTemplate, labelOf, line, parse, reworkOf, shortName, stageTimes } from './model'
 import { deliveredMessages, inboxMessages, messageEvent, taskEvents } from './recorder'
 import type { InboxMessage, Recorded, TaskFile } from './recorder'
-import { AREA_COLOR, altText, messageLines, summary, textView } from './views'
+import { AREA_COLOR, altText, messageLines, summary, textView, titled } from './views'
 import type { Line, Theme } from './views'
 
 const PANE = 'team-wire'
@@ -618,17 +618,12 @@ const loadSettings = async ($: EngineInterface): Promise<boolean> => {
 }
 
 // /team config: the settings in force and where they come from; `init` writes them to a file to edit.
-const STARTER_LABELS: Record<string, string> = {
-  'api-spec': 'API spec', 'ui-spec': 'UI spec', 'security-spec': 'Threat model', acceptance: 'Acceptance', 'attack-plan': 'Attack plan',
-  build: 'Build', ui: 'UI', integrate: 'Integrate', review: 'Review', 'security-review': 'Security review',
-  'design-review': 'Design review', merge: 'Merge', attack: 'Attack',
-}
 const configCommand = async ($: EngineInterface, arg: string): Promise<string> => {
   const rel = '.claude/team-wire.json'
   if (arg === 'init') {
     if (await $.fs.exists(settingsPath).catch(() => false)) return `${rel} already exists; edit it, and Team Wire picks the change up within a few seconds.`
     const starter = {
-      steps: line().map(k => ({ kind: k, label: labelOf(k) ?? STARTER_LABELS[k] ?? k })),
+      steps: line().map(k => ({ kind: k, label: labelOf(k) ?? titled(k) })),
       rework: reworkOf(),
       shipStep: line().includes('merge') ? 'merge' : line()[line().length - 1],
       titleStep: line().includes('build') ? 'build' : line()[0],

@@ -36,7 +36,7 @@ Then, in the session that leads the team, run `/team`.
   - how many are ready but not started, and the longest any has waited
   - a shaded background on the step where work has waited longest: your bottleneck
 - **Issue cards.** Click an issue to see each step with who had it, when it ran, how long it waited and how long the work took, plus what the team said about it. "Open in GitHub/GitLab" takes you to the issue.
-- **Alerts.** Messages that report a problem (`BLOCKED`, `STUCK`, `OFF-TRACK`, `FINDINGS`... or your own words) pop up as a toast with a sound. The teammate concerned gets a blinking red ring, and a "needs attention" button appears.
+- **Alerts.** Messages that report a problem (`BLOCKED`, `STUCK`, `FAILED`... or your own words) pop up as a toast with a sound. The teammate concerned gets a blinking red ring, and a "needs attention" button appears.
 - **Replay.** Step back through the day (`[` `]` by 10 minutes, `{` `}` by an hour) or click the timeline strip, and the whole picture shows the team as it stood then.
 - **`/team times`**: a table of each step's average wait, average work time and current queue, useful for a retrospective.
 - **A summary line** above the prompt, e.g. `Team · 3 working · 2 waiting · ▲ tester · 5/12 issues merged`.
@@ -114,14 +114,24 @@ example `#12 build backend-dev: The parser`. Without them, the team, its work an
   its ship step counts an issue shipped once all its tasks are done.
 - **`titleStep`**: the task whose title names the issue. Defaults to `build`, otherwise the first step.
 - **`words`**: words that mark a message as a `problem`, `handoff`, `approve` or `merge`. They match whole words
-  near the message's start, in any case, and replace that kind's default words.
+  near the message's start, in any case, and replace that kind's default words. A word between slashes is a pattern.
 - **`issueUrl`**: where "Open in …" goes, with `{n}` for the number. Without it, the link comes from the git
   remote, in GitHub's or GitLab's form.
-- **`roles`**: an area (`lead`, `backend`, `ui`, `qa`, `sec` or `rev`) for a name.
+- **`roles`**: an area (`lead`, `backend`, `ui`, `qa`, `sec` or `rev`) for a name. Listed names are seated from the
+  start, in the order listed.
 
-Without settings, Team Wire uses its default line, a spec-first and security-reviewed process: `api-spec`, `ui-spec`,
-`security-spec`, `acceptance`, `attack-plan`, `build`, `ui`, `integrate`, `review`, `security-review`,
-`design-review`, `merge`, `attack`.
+Without settings, Team Wire uses the steps `plan`, `build`, `ui`, `test`, `review` and `merge`, with `fix` as rework.
+
+Message words default to how a message starts:
+- **Problem:** `BLOCKED`, `STUCK`, `OFF-TRACK`, `FAIL`/`FAILED`, `ERROR`, `REJECTED`, `NOT READY`, `CHANGES REQUESTED`, `HELP`.
+- **Hand-off:** `… READY`, `… DONE`.
+- **Approval:** `APPROVED`, `LGTM`, `PASS`.
+- **Merge:** `MERGED`.
+
+A word written between slashes is a pattern, tried on the message's first 80 characters in capitals. For example,
+`"/\\b[1-9]\\d* FINDINGS?\\b/"` marks "2 findings" as a problem but not "0 findings".
+
+Teammates listed in `roles` are seated from the start, in the order listed, as soon as the log mentions any of them.
 
 ## Platforms
 

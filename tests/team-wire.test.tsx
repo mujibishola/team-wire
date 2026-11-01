@@ -7,12 +7,12 @@ import type { Hit } from '../hooks/dashboard'
 import { svgView, textView } from '../hooks/views'
 
 const log = [
-  { ts: '2026-10-31T10:00:00Z', event: 'PostToolUse', agent: 'lead', tool: 'TaskCreate', input: { subject: '#12 build accounts-engineer: invitations' }, response: { task: { id: '1' } } },
-  { ts: '2026-10-31T10:00:01Z', event: 'PostToolUse', agent: 'lead', tool: 'TaskCreate', input: { subject: '#12 ui web-engineer: invitations screen' }, response: { task: { id: '2' } } },
-  { ts: '2026-10-31T10:00:02Z', event: 'PostToolUse', agent: 'lead', tool: 'TaskCreate', input: { subject: '#12 review reviewer: invitations' }, response: { task: { id: '3' } } },
+  { ts: '2026-10-31T10:00:00Z', event: 'PostToolUse', agent: 'lead', tool: 'TaskCreate', input: { subject: '#12 build backend-engineer: login form' }, response: { task: { id: '1' } } },
+  { ts: '2026-10-31T10:00:01Z', event: 'PostToolUse', agent: 'lead', tool: 'TaskCreate', input: { subject: '#12 ui web-engineer: login screen' }, response: { task: { id: '2' } } },
+  { ts: '2026-10-31T10:00:02Z', event: 'PostToolUse', agent: 'lead', tool: 'TaskCreate', input: { subject: '#12 review reviewer: login form' }, response: { task: { id: '3' } } },
   { ts: '2026-10-31T10:00:03Z', event: 'PostToolUse', agent: 'lead', tool: 'TaskUpdate', input: { taskId: '3', addBlockedBy: ['1', '2'] } },
-  { ts: '2026-10-31T10:01:00Z', event: 'PostToolUse', agent: 'accounts-engineer', tool: 'TaskUpdate', input: { taskId: '1', status: 'in_progress' } },
-  { ts: '2026-10-31T10:02:00Z', event: 'TaskCompleted', agent: 'web-engineer', task_id: '2', task_subject: '#12 ui web-engineer: invitations screen', outcome: 'completed' },
+  { ts: '2026-10-31T10:01:00Z', event: 'PostToolUse', agent: 'backend-engineer', tool: 'TaskUpdate', input: { taskId: '1', status: 'in_progress' } },
+  { ts: '2026-10-31T10:02:00Z', event: 'TaskCompleted', agent: 'web-engineer', task_id: '2', task_subject: '#12 ui web-engineer: login screen', outcome: 'completed' },
   { ts: '2026-10-31T10:03:00Z', event: 'PostToolUse', agent: 'web-engineer', tool: 'SendMessage', input: { to: 'team-lead', message: 'OFF-TRACK web-engineer #12: reworking the shared table' } },
   { ts: '2026-10-31T10:04:00Z', event: 'PostToolUse', agent: 'lead', tool: 'SendMessage', input: { to: 'web-engineer', message: 'Leave the table.' } },
 ].map(e => JSON.stringify(e)).join('\n') + '\nnot json\n'
@@ -21,8 +21,8 @@ test('the log becomes who works on what, and where each issue is', () => {
   const team = parse(log)
   const by = (n: string) => team.members.find(m => m.name === n)!
 
-  expect(by('accounts-engineer').status).toBe('working')
-  expect(by('accounts-engineer').issue).toBe(12)
+  expect(by('backend-engineer').status).toBe('working')
+  expect(by('backend-engineer').issue).toBe(12)
   expect(by('web-engineer').status).toBe('free')
   expect(by('web-engineer').isFlagged).toBe(true)
   expect(by('reviewer').status).toBe('waiting')
@@ -36,20 +36,33 @@ test('the log becomes who works on what, and where each issue is', () => {
   expect(team.pairs).toEqual([{ a: 'lead', b: 'web-engineer', n: 2, lastTs: '2026-10-31T10:04:00Z' }])
 })
 
-test('message kinds follow the team protocol', () => {
+test('message kinds follow how a message starts, and a project can say it exactly with patterns', () => {
   expect(classify('API READY #12: docs/api/12.yaml')).toBe('handoff')
-  expect(classify('READY #12 build: team/x/12 at abc')).toBe('handoff')
-  expect(classify('OFF-TRACK web-engineer #12: drift')).toBe('problem')
-  expect(classify('#12 review: 2 findings')).toBe('problem')
-  expect(classify('#12 attack: 0 holes')).toBe('note')
+  expect(classify('DONE #12: the parser is in')).toBe('handoff')
+  expect(classify('BLOCKED on #12: no fixtures')).toBe('problem')
+  expect(classify('Failed: 3 tests')).toBe('problem')
+  expect(classify('LGTM, ship it')).toBe('approve')
   expect(classify('#12 review approved')).toBe('approve')
   expect(classify('#12 merged to main at 5e01b7c')).toBe('merge')
+  expect(classify('Thanks, carry on')).toBe('note')
+  try {
+    // "2 findings" is a problem and "0 holes" isn't: a pattern says what a word can't.
+    expect(configure({ words: { problem: ['/^(OFF-TRACK|FINDINGS?\\b)/', '/\\b[1-9]\\d* (FINDINGS?|HOLES?)\\b/'], handoff: ['/^[A-Z -]*READY\\b|^ATTACK PLAN\\b/'] } })).toEqual([])
+    expect(classify('#12 review: 2 findings')).toBe('problem')
+    expect(classify('#12 attack: 0 holes')).toBe('note')
+    expect(classify('ATTACK PLAN #12: docs/x.md')).toBe('handoff')
+    expect(classify('BLOCKED on #12')).toBe('note')
+    expect(classify('#12 merged')).toBe('merge')
+    expect(configure({ words: { problem: ['/(unclosed/'] } })).toEqual(['words.problem: /(unclosed/ is not a valid pattern'])
+  } finally {
+    configure(undefined)
+  }
 })
 
 test('a fix task puts the crate back at build as rework', () => {
   const rework = log + '\n' + [
-    { ts: '2026-10-31T10:05:00Z', event: 'PostToolUse', agent: 'lead', tool: 'TaskCreate', input: { subject: '#12 fix accounts-engineer: review findings' }, response: { task: { id: '4' } } },
-    { ts: '2026-10-31T10:05:01Z', event: 'PostToolUse', agent: 'accounts-engineer', tool: 'TaskUpdate', input: { taskId: '4', status: 'in_progress' } },
+    { ts: '2026-10-31T10:05:00Z', event: 'PostToolUse', agent: 'lead', tool: 'TaskCreate', input: { subject: '#12 fix backend-engineer: review findings' }, response: { task: { id: '4' } } },
+    { ts: '2026-10-31T10:05:01Z', event: 'PostToolUse', agent: 'backend-engineer', tool: 'TaskUpdate', input: { taskId: '4', status: 'in_progress' } },
   ].map(e => JSON.stringify(e)).join('\n')
   const issue = parse(rework).issues.find(i => i.issue === 12)!
   expect(issue.isRework).toBe(true)
@@ -169,9 +182,9 @@ test('a click on the picture finds the teammate, tab, filter or step drawn there
         expect(under(hits, centre(at(hits, a)!))).toBe(a)
       }
       // Someone standing in the scene is picked over the room they stand in, and is drawn inside the picture.
-      const who = hits.filter(h => h.action === 'who:accounts-engineer' && h.w < 80)
+      const who = hits.filter(h => h.action === 'who:backend-engineer' && h.w < 80)
       expect(who.length).toBe(1)
-      expect(under(hits, centre(who[0]!))).toBe('who:accounts-engineer')
+      expect(under(hits, centre(who[0]!))).toBe('who:backend-engineer')
       expect(who[0]!.x).toBeGreaterThan(0)
       expect(who[0]!.x + who[0]!.w).toBeLessThan(width)
     }
@@ -185,7 +198,7 @@ test('a picked step lists its issues in place of the chat', () => {
   expect(svg).toContain('#12')
   expect(svg).toContain('running')
   expect(svg).not.toContain('Team chat')
-  expect(hits.some(h => h.action === 'who:accounts-engineer' && h.w > 80)).toBe(true)
+  expect(hits.some(h => h.action === 'who:backend-engineer' && h.w > 80)).toBe(true)
 })
 
 test('the picture for rsvg-convert carries colours, not CSS variables', () => {
@@ -213,7 +226,7 @@ test('a flagged teammate gets a needs-attention button, and a fresh alert a blin
 
 test('an issue keeps its title and each step with who had it and when', () => {
   const i = parse(log).issues.find(x => x.issue === 12)!
-  expect(i.title).toBe('invitations')
+  expect(i.title).toBe('login form')
   expect(i.steps.map(s => [s.kind, s.state])).toEqual([['build', 'run'], ['ui', 'done'], ['review', 'wait']])
   expect(i.steps[0]!.startTs).toBe('2026-10-31T10:01:00Z')
   expect(i.steps[1]!.doneTs).toBe('2026-10-31T10:02:00Z')
@@ -259,7 +272,7 @@ test('a demo is badged, beside a replay, so neither passes for the live team', (
 
 test('each step knows how long work queued there, and the longest queue is shaded on the rail', () => {
   const later = [
-    { ts: '2026-10-31T10:30:00Z', event: 'PostToolUse', agent: 'accounts-engineer', tool: 'TaskUpdate', input: { taskId: '1', status: 'completed' } },
+    { ts: '2026-10-31T10:30:00Z', event: 'PostToolUse', agent: 'backend-engineer', tool: 'TaskUpdate', input: { taskId: '1', status: 'completed' } },
     { ts: '2026-10-31T11:10:00Z', event: 'PostToolUse', agent: 'lead', tool: 'SendMessage', input: { to: 'reviewer', message: 'Review #12 when free.' } },
   ].map(e => JSON.stringify(e)).join('\n')
   const team = parse(`${log}${later}\n`)
@@ -400,7 +413,7 @@ test('a project\'s settings name its own steps, words and roles, and their probl
   } finally {
     configure(undefined)
   }
-  expect(line()).toContain('security-review')
+  expect(line()).toEqual(['plan', 'build', 'ui', 'test', 'review', 'merge'])
   expect(classify('OFF-TRACK dev #3')).toBe('problem')
 })
 

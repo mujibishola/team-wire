@@ -1,28 +1,7 @@
 import type { Alert, Area, Issue, Member, Msg, MsgKind, Pair, StageState, StageTime, Team } from '../types'
 
-// The default roles, in the order the views seat them; numbered extras
-// (gateway-engineer-2) take their role's area.
-export const ROLES: readonly (readonly [string, Area])[] = [
-  ['lead', 'lead'],
-  ['platform-engineer', 'backend'],
-  ['gateway-engineer', 'backend'],
-  ['accounts-engineer', 'backend'],
-  ['web-engineer', 'ui'],
-  ['mobile-engineer', 'ui'],
-  ['qa-engineer', 'qa'],
-  ['security-engineer', 'sec'],
-  ['security-tester', 'sec'],
-  ['reviewer', 'rev'],
-  ['design-reviewer', 'rev'],
-]
-
-// The default line, a spec-first and security-reviewed process: its task kinds in the order an issue moves through
-// them. A project's .claude/team-wire.json can name its own.
-export const DEFAULT_LINE: readonly string[] = [
-  'api-spec', 'ui-spec', 'security-spec', 'acceptance', 'attack-plan',
-  'build', 'ui', 'integrate', 'review', 'security-review', 'design-review',
-  'merge', 'attack',
-]
+// The task kinds an issue moves through, in order, unless a project's .claude/team-wire.json names its own.
+export const DEFAULT_LINE: readonly string[] = ['plan', 'build', 'ui', 'test', 'review', 'merge']
 
 /** A project's .claude/team-wire.json, as read; every field is optional. */
 export type SettingsFile = {
@@ -30,8 +9,10 @@ export type SettingsFile = {
   rework?: { kind?: string; to?: string }
   shipStep?: string
   titleStep?: string
+  /** Words that mark a message, or patterns between slashes (`"/^FINDINGS?\\b/"`), tried on its first 80 characters in capitals. */
   words?: Partial<Record<'problem' | 'handoff' | 'approve' | 'merge', string[]>>
   issueUrl?: string
+  /** Names' areas; the names listed are also seated from the start, in this order, once the log has any of them. */
   roles?: Record<string, Area>
 }
 type Settings = {
@@ -40,7 +21,7 @@ type Settings = {
   rework: { kind: string; to: string }
   shipStep: string
   titleStep: string
-  words: Partial<Record<MsgKind, RegExp>>
+  words: Partial<Record<MsgKind, RegExp[]>>
   issueUrl: string
   roles: Record<string, Area>
 }
@@ -52,7 +33,6 @@ const DEFAULTS: Settings = {
 let cfg: Settings = DEFAULTS
 
 export const line = (): readonly string[] => cfg.steps
-export const isDefaultLine = (): boolean => cfg.steps === DEFAULT_LINE
 export const labelOf = (kind: string): string | undefined => cfg.labels[kind]
 export const issueUrlTemplate = (): string => cfg.issueUrl
 export const reworkOf = (): { kind: string; to: string } => cfg.rework
@@ -104,7 +84,22 @@ export const configure = (raw: unknown): string[] => {
   for (const [kind, list] of Object.entries(f.words ?? {})) {
     if (!['problem', 'handoff', 'approve', 'merge'].includes(kind)) problems.push(`words: "${kind}" is not problem, handoff, approve or merge`)
     else if (!Array.isArray(list) || !list.every(w => typeof w === 'string' && w.trim())) problems.push(`words.${kind}: needs a list of words`)
-    else next.words[kind as MsgKind] = new RegExp(`(^|[^A-Z0-9])(${list.map(w => escapeRe(w.trim().toUpperCase())).join('|')})(?![A-Z0-9])`)
+    else {
+      const res: RegExp[] = []
+      const plain: string[] = []
+      for (const w of list.map(x => x.trim())) {
+        // A word between slashes is a pattern, for what a word can't say (at the start only, a count before it).
+        if (w.length > 2 && w.startsWith('/') && w.endsWith('/')) {
+          try {
+            res.push(new RegExp(w.slice(1, -1)))
+          } catch {
+            problems.push(`words.${kind}: ${w} is not a valid pattern`)
+          }
+        } else plain.push(escapeRe(w.toUpperCase()))
+      }
+      if (plain.length) res.push(new RegExp(`(^|[^A-Z0-9])(${plain.join('|')})(?![A-Z0-9])`))
+      if (res.length) next.words[kind as MsgKind] = res
+    }
   }
   if (f.issueUrl !== undefined) {
     if (typeof f.issueUrl === 'string' && /^https?:\/\/\S+\{n\}/.test(f.issueUrl)) next.issueUrl = f.issueUrl
@@ -121,11 +116,11 @@ const FLAG_MS = 60 * 60 * 1000
 const MAX_MSGS = 80
 
 export const roleOf = (name: string): string => name.replace(/-\d+$/, '')
-// Any team's names count, not only the roles above: a teammate is whatever name owns a task or sends or receives a
+// A teammate is whatever name owns a task or sends or receives a
 // message, but for addresses that are no one (a broadcast) and agent types that are subagents, not teammates.
 const NOT_TEAMMATES = new Set(['*', 'all', 'everyone', 'user', 'system', 'general-purpose', 'explore', 'plan', 'claude', 'fork'])
 const isMember = (name: string): boolean =>
-  ROLES.some(([r]) => r === roleOf(name)) || cfg.roles[name] !== undefined || cfg.roles[roleOf(name)] !== undefined || (/^[a-z][a-z0-9_-]{0,40}$/.test(name) && !NOT_TEAMMATES.has(name))
+  cfg.roles[name] !== undefined || cfg.roles[roleOf(name)] !== undefined || (/^[a-z][a-z0-9_-]{0,40}$/.test(name) && !NOT_TEAMMATES.has(name))
 // A name the roles don't know takes its area from what it says it does.
 const AREA_WORDS: readonly (readonly [RegExp, Area])[] = [
   [/lead|manager|coordinator|orchestrat/, 'lead'],
@@ -135,7 +130,7 @@ const AREA_WORDS: readonly (readonly [RegExp, Area])[] = [
   [/web|ui|ux|front|mobile|ios|android|flutter|react|design|css/, 'ui'],
 ]
 export const areaOf = (name: string): Area =>
-  cfg.roles[name] ?? cfg.roles[roleOf(name)] ?? ROLES.find(([r]) => r === roleOf(name))?.[1] ?? AREA_WORDS.find(([re]) => re.test(roleOf(name)))?.[1] ?? 'backend'
+  cfg.roles[name] ?? cfg.roles[roleOf(name)] ?? AREA_WORDS.find(([re]) => re.test(roleOf(name)))?.[1] ?? 'backend'
 // The lead logs as `lead` but is addressed as `team-lead`.
 const norm = (name: string): string => (name === 'team-lead' || name === 'main' ? 'lead' : name)
 
@@ -161,27 +156,19 @@ export const parseSubject = (s: string): { issue?: number; kind?: string; owner?
 export const classify = (text: string): MsgKind => {
   const head = text.trimStart().slice(0, 80).toUpperCase()
   // A project's own words replace the defaults for their kind; the order of the kinds stays.
-  const own = cfg.words
-  if (Object.keys(own).length) {
-    for (const kind of ['problem', 'merge', 'approve', 'handoff'] as const) {
-      const re = own[kind]
-      if (re ? re.test(head) : DEFAULT_WORDS[kind](head)) return kind
-    }
-    return 'note'
+  for (const kind of ['problem', 'merge', 'approve', 'handoff'] as const) {
+    const own = cfg.words[kind]
+    if (own ? own.some(re => re.test(head)) : DEFAULT_WORDS[kind](head)) return kind
   }
-  if (/^(OFF-TRACK|STUCK|BLOCKED|FINDINGS?\b|CHANGES\b|INSECURE|REJECTED|NOT READY|FAIL)/.test(head)) return 'problem'
-  if (/\b[1-9]\d* (FINDINGS?|HOLES?)\b/.test(head)) return 'problem'
-  if (/\bMERGED\b/.test(head)) return 'merge'
-  if (/\bAPPROVED\b|^PASS(ED)?\b/.test(head)) return 'approve'
-  if (/^[A-Z -]*READY\b|^ATTACK PLAN\b/.test(head)) return 'handoff'
   return 'note'
 }
 
+// What a message says, by how it starts: problems first, as a message can report one and a hand-off at once.
 const DEFAULT_WORDS: Record<'problem' | 'merge' | 'approve' | 'handoff', (head: string) => boolean> = {
-  problem: h => /^(OFF-TRACK|STUCK|BLOCKED|FINDINGS?\b|CHANGES\b|INSECURE|REJECTED|NOT READY|FAIL)/.test(h) || /\b[1-9]\d* (FINDINGS?|HOLES?)\b/.test(h),
+  problem: h => /^(OFF-TRACK|STUCK|BLOCKED|FAIL(ED|ING|URE)?|ERROR|REJECTED|NOT READY|CHANGES REQUESTED|HELP)\b/.test(h),
   merge: h => /\bMERGED\b/.test(h),
-  approve: h => /\bAPPROVED\b|^PASS(ED)?\b/.test(h),
-  handoff: h => /^[A-Z -]*READY\b|^ATTACK PLAN\b/.test(h),
+  approve: h => /\bAPPROVED\b|^(LGTM|PASS(ED)?)\b/.test(h),
+  handoff: h => /^[A-Z -]*\b(READY|DONE)\b/.test(h),
 }
 
 const ms = (ts: string): number => {
@@ -280,10 +267,10 @@ export const parse = (text: string, until = ''): Team => {
   }
 
   for (const t of tasks.values()) if (t.owner && isMember(norm(t.owner))) names.add(norm(t.owner))
-  // A team built on these roles shows each of them from the start, in the break room until they get work; any other
-  // team shows only the names its log has.
-  const isOurs = [...names].some(n => n !== 'lead' && ROLES.some(([r]) => r === roleOf(n)))
-  if (isOurs) for (const [r] of ROLES) names.add(r)
+  // The roles a project lists show from the start, in the break room until they get work, once its log has any of
+  // them; otherwise only the names the log has.
+  const listed = Object.keys(cfg.roles)
+  if ([...names].some(n => n !== 'lead' && listed.includes(roleOf(n)))) for (const r of listed) names.add(r)
   const done = (id: string) => tasks.get(id)?.status === 'completed' || !tasks.has(id)
   const open = [...tasks.values()].filter(t => t.status !== 'completed')
   const now = ms(lastTs)
@@ -299,10 +286,10 @@ export const parse = (text: string, until = ''): Team => {
     return at
   }
 
-  // The known roles in their order, then any other names alphabetically.
+  // The lead, the listed roles in their order, then any other names alphabetically.
   const order = (n: string) => {
-    const i = ROLES.findIndex(([r]) => r === roleOf(n))
-    return (i < 0 ? ROLES.length : i) * 100 + Number(/-(\d+)$/.exec(n)?.[1] ?? 0)
+    const i = n === 'lead' ? -1 : listed.indexOf(roleOf(n))
+    return (i < 0 && n !== 'lead' ? listed.length : i) * 100 + Number(/-(\d+)$/.exec(n)?.[1] ?? 0)
   }
   const members: Member[] = [...names].sort((a, b) => order(a) - order(b) || a.localeCompare(b)).map(name => {
     const mine = open.filter(t => t.owner !== undefined && norm(t.owner) === name).sort((a, b) => b.seq - a.seq)
@@ -422,10 +409,10 @@ export const shortName = (name: string): string =>
 export const initials = (name: string): string => {
   const n = /-(\d+)$/.exec(name)?.[1] ?? ''
   const base = roleOf(name)
-  const map: Record<string, string> = { lead: 'L', 'platform-engineer': 'P', 'gateway-engineer': 'G', 'accounts-engineer': 'A', 'web-engineer': 'W', 'mobile-engineer': 'M', 'qa-engineer': 'Q', 'security-engineer': 'S', 'security-tester': 'T', reviewer: 'R', 'design-reviewer': 'D' }
-  // Another team's name: the first letters of its first two words (backend-dev BD, tester T).
-  const own = base.split(/[-_]/).filter(Boolean).slice(0, 2).map(w => w[0]!.toUpperCase()).join('')
-  return (map[base] ?? (own || '?')) + n
+  // The first letters of its first two words, a trailing "engineer" left out: backend-dev BD, web-engineer W.
+  const words = base.split(/[-_]/).filter(Boolean)
+  const kept = words.length > 1 && words[words.length - 1] === 'engineer' ? words.slice(0, -1) : words
+  return (kept.slice(0, 2).map(w => w[0]!.toUpperCase()).join('') || '?') + n
 }
 
 export const hhmm = (ts: string): string => (ts.length >= 16 ? ts.slice(11, 16) : '')

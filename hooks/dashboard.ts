@@ -42,13 +42,8 @@ const VIEW_TABS: [View, string][] = [['map', 'Map'], ['office', 'Office'], ['fac
 const FILTER_TABS: [Filter, string][] = [['all', 'All'], ['handoff', 'Hand-offs'], ['problem', 'Problems']]
 
 const PAD = 16
-const RAIL_LABEL: Record<string, string> = {
-  'api-spec': 'API spec', 'ui-spec': 'UI spec', 'security-spec': 'Threat', acceptance: 'Accept', 'attack-plan': 'Atk plan',
-  build: 'Build', ui: 'UI', integrate: 'Integrate', review: 'Review', 'security-review': 'Sec rev', 'design-review': 'Design',
-  merge: 'Merge', attack: 'Attack', fix: 'Fix',
-}
-// A project's own label, else the default line's short one, else the kind: "code-review" reads "Code review".
-const railLabel = (k: string): string => labelOf(k) ?? RAIL_LABEL[k] ?? titled(k)
+// A project's own label, else the kind: "code-review" reads "Code review".
+const railLabel = (k: string): string => labelOf(k) ?? titled(k)
 const KIND_VAR = { handoff: 'backend', problem: 'bad', approve: 'ok', merge: 'lead', note: 'muted' } as const
 const STATUS_VAR = { working: 'ok', waiting: 'warn', free: 'idle' } as const
 const v = (a: Area) => `var(--${a})`

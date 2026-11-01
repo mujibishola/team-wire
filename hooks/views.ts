@@ -1,5 +1,5 @@
 import type { Area, Member, Msg, Team, View } from '../types'
-import { hhmm, initials, isDefaultLine, labelOf, line, reworkOf, shortName } from './model'
+import { hhmm, initials, labelOf, line, reworkOf, shortName } from './model'
 
 /* ---------- shared ---------- */
 
@@ -18,21 +18,11 @@ export const KIND_LABEL = { handoff: 'hand-off', problem: 'problem', approve: 'a
 const KIND_KEY = { handoff: 'suggestion', problem: 'error', approve: 'success', merge: 'claude', note: 'subtle' } as const
 export const kindColor = (k: Msg['kind']): string => KIND_KEY[k]
 
-const ABBR: Record<string, string> = {
-  'api-spec': 'api', 'ui-spec': 'uis', 'security-spec': 'thr', acceptance: 'acc', 'attack-plan': 'atp',
-  build: 'bld', ui: 'ui', integrate: 'int', review: 'rev', 'security-review': 'srv', 'design-review': 'dsg',
-  merge: 'mrg', attack: 'atk',
-}
-export const STATION: Record<string, string> = {
-  'api-spec': 'API spec', 'ui-spec': 'UI spec', 'security-spec': 'Threat model', acceptance: 'Acceptance',
-  'attack-plan': 'Attack plan', build: 'Build', ui: 'UI', integrate: 'Integrate', review: 'Review',
-  'security-review': 'Sec review', 'design-review': 'Design review', merge: 'Merge', attack: 'Attack',
-}
 const stationOf = (kind?: string): string | undefined => (kind === reworkOf().kind ? reworkOf().to : kind)
-// A project's own label, else the default line's, else the kind itself: "code-review" reads "Code review".
+// A project's own label, else the kind itself: "code-review" reads "Code review", "qa" "QA".
 export const titled = (k: string) => (k.length <= 3 ? k.toUpperCase() : k.charAt(0).toUpperCase() + k.slice(1).replace(/-/g, ' '))
-export const stationName = (k: string): string => labelOf(k) ?? STATION[k] ?? titled(k)
-const abbr = (k: string): string => ABBR[k] ?? (labelOf(k) ?? k).replace(/[^a-z0-9]/gi, '').slice(0, 3).toLowerCase()
+export const stationName = (k: string): string => labelOf(k) ?? titled(k)
+const abbr = (k: string): string => (labelOf(k) ?? k).replace(/[^a-z0-9]/gi, '').slice(0, 3).toLowerCase()
 
 const glyph = (m: Member): Seg =>
   m.isFlagged ? { t: '▲', color: 'error' }
@@ -296,18 +286,9 @@ const svgOffice = (team: Team, theme: Theme) => {
   return frame(W, H, theme, s, `<pattern id="p" width="24" height="24" patternUnits="userSpaceOnUse"><circle cx="1" cy="1" r="1" fill="var(--grid)"/></pattern>`)
 }
 
-const B1 = 170, LU = 120, LD = 225, B2 = 500
-export const FST: Record<string, [number, number]> = {
-  'api-spec': [80, B1], 'ui-spec': [185, B1], 'security-spec': [290, B1], acceptance: [395, B1], 'attack-plan': [500, B1],
-  build: [690, LU], ui: [690, LD],
-  integrate: [815, B2], review: [705, B2], 'security-review': [595, B2], 'design-review': [485, B2], merge: [375, B2], attack: [265, B2],
-}
-const LANES = new Set(['build', 'ui'])
-
-// Where each step's station stands: the default line's drawn layout, or for a project's own steps, the first half along
-// line 1 left to right and the rest along line 2 right to left.
+const B1 = 170, B2 = 500
+// Where each step's station stands: the first half along line 1 left to right, the rest along line 2 right to left.
 const stations = (): Record<string, [number, number]> => {
-  if (isDefaultLine()) return FST
   const steps = line()
   const top = Math.ceil(steps.length / 2)
   const out: Record<string, [number, number]> = {}
@@ -330,13 +311,9 @@ const svgFactory = (team: Team, theme: Theme) => {
   const W = 900, H = 600
   let s = ''
   const at0 = stations()
-  const isOurs = isDefaultLine()
-  const belt = !isOurs ? `M30 ${B1}H850Q872 ${B1} 872 ${B1 + 22}V${B2 - 22}Q872 ${B2} 850 ${B2}H150` : `M30 ${B1}H580C610 ${B1} 610 ${LU} 640 ${LU}H740C770 ${LU} 770 ${B1} 800 ${B1}M580 ${B1}C610 ${B1} 610 ${LD} 640 ${LD}H740C770 ${LD} 770 ${B1} 800 ${B1}M800 ${B1}H850Q872 ${B1} 872 ${B1 + 22}V${B2 - 22}Q872 ${B2} 850 ${B2}H150`
+  const belt = `M30 ${B1}H850Q872 ${B1} 872 ${B1 + 22}V${B2 - 22}Q872 ${B2} 850 ${B2}H150`
   s += `<path d="${belt}" fill="none" stroke="var(--belt)" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"/>`
   s += `<path d="${belt}" fill="none" stroke="var(--belthi)" stroke-width="2" stroke-dasharray="6 10" class="belt"/>`
-  if (isOurs) s += `<text class="lbl" x="30" y="${B1 - 96}" fill="var(--muted)">Line 1 · specs and build</text><text class="lbl" x="265" y="${H - 14}" fill="var(--muted)">Line 2 · integrate, gates, ship</text>`
-  // The three reviews run side by side: boxed together.
-  if (isOurs) s += `<rect x="435" y="${B2 - 66}" width="320" height="56" rx="12" fill="none" stroke="var(--rev)" stroke-opacity=".5" stroke-dasharray="4 4"/>`
 
   const running = new Set(team.issues.flatMap(i => Object.entries(i.stages).filter(([, st]) => st === 'run').map(([k]) => stationOf(k)!)))
   for (const [k, [x, y]] of Object.entries(at0)) {
@@ -344,9 +321,6 @@ const svgFactory = (team: Team, theme: Theme) => {
     s += `<rect x="${x - 44}" y="${y - 58}" width="88" height="42" rx="10" fill="var(--surface)" stroke="var(--line)"/><text class="ml" x="${x}" y="${y - 32}" text-anchor="middle">${esc(stationName(k))}</text>`
     s += `<circle cx="${x + 33}" cy="${y - 49}" r="4" fill="var(--${on ? 'ok' : 'line'})"${on ? ' class="pulse"' : ''}/>`
     if (on) s += `<g transform="translate(${x - 33} ${y - 47})"><circle r="5.5" fill="none" stroke="var(--muted)" stroke-width="3" stroke-dasharray="3 2.2" class="spin"/></g>`
-  }
-  if (isOurs && team.issues.some(i => i.isRework)) {
-    s += `<path d="M705 ${B2 - 66}C780 360 760 ${LU + 40} 735 ${LU - 10}" fill="none" stroke="var(--bad)" stroke-width="3" stroke-dasharray="2 6" class="belt" stroke-linecap="round"/><text class="sm" x="772" y="350" style="fill:var(--bad)">rework</text>`
   }
 
   // Middle band: break room, control room, loading bay.
@@ -368,7 +342,7 @@ const svgFactory = (team: Team, theme: Theme) => {
   const at = new Map<string, typeof team.issues>()
   for (const i of team.issues) if (!i.isShipped && i.at && at0[i.at]) at.set(i.at, [...(at.get(i.at) ?? []), i])
   for (const [k, list] of at) {
-    const [x, y] = at0[k]!, cap = isOurs && LANES.has(k) ? 2 : 3
+    const [x, y] = at0[k]!, cap = 3
     list.slice(0, cap).forEach((i, n) => (s += crate(x, y + (n === 0 ? 0 : 14 + n * 24), `#${i.issue}`, i.isRework ? 'var(--bad)' : i.isActive ? 'var(--lead)' : 'var(--idle)')))
     if (list.length > cap) s += `<text class="sm" x="${x + 22}" y="${y + 14 + cap * 24}">+${list.length - cap}</text>`
   }
@@ -385,12 +359,10 @@ const svgFactory = (team: Team, theme: Theme) => {
   // Crowded spots show initials only; the name is in each avatar's tooltip.
   for (const [k, ms] of byStation) {
     const [x, y] = at0[k]!
-    const isLane = isOurs && LANES.has(k)
     ms.slice(0, 3).forEach((m, i) => {
-      const px = isLane ? x + 66 + i * 36 : x + (i - (Math.min(3, ms.length) - 1) / 2) * 38
-      s += person(m, px, isLane ? y - 37 : y - 84, { hat: true, isNameless: true })
+      s += person(m, x + (i - (Math.min(3, ms.length) - 1) / 2) * 38, y - 84, { hat: true, isNameless: true })
     })
-    if (ms.length > 3) s += `<text class="sm" x="${isLane ? x + 160 : x + 58}" y="${isLane ? y - 33 : y - 80}">+${ms.length - 3}</text>`
+    if (ms.length > 3) s += `<text class="sm" x="${x + 58}" y="${y - 80}">+${ms.length - 3}</text>`
   }
   // Twelve seats: whoever needs attention sits first, so their ring is never the one left out.
   resting.sort((a, b) => Number(b.isFlagged || flashing.has(b.name)) - Number(a.isFlagged || flashing.has(a.name)))
