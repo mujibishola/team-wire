@@ -302,15 +302,19 @@ const issueCard = (team: Team, issue: Issue, x: number, y: number, w: number, h:
   issue.steps.slice(0, stepRoom).forEach(st => {
     s += `<circle cx="${x + PAD + 5}" cy="${ry + 8}" r="5" fill="var(--${STAGE_VAR[st.state]})"${st.state === 'run' ? ' class="pulse"' : ''}/>`
     s += `<text x="${x + PAD + 18}" y="${ry + 12}" class="val">${esc(railLabel(st.kind))}</text>`
+    // A finished step: when it finished and how long it took; the start is in the step before.
     const took = st.startTs && st.doneTs ? ` · ${dur(ms(st.doneTs) - ms(st.startTs))}` : ''
-    const time = st.state === 'done' ? `${when(st.startTs) || '…'} → ${when(st.doneTs)}${took}`
+    const time = st.state === 'done' ? `done ${when(st.doneTs)}${took}`
       : st.state === 'run' ? (st.startTs ? `since ${when(st.startTs)} · ${dur(now - ms(st.startTs))}` : 'running')
       : st.readyTs ? `ready ${dur(now - ms(st.readyTs))}` : 'blocked'
-    s += `<text x="${x + PAD + 110}" y="${ry + 12}" class="meta">${esc(time)}</text>`
+    // The owner's name gets a fixed column, the time what is left, so neither runs into the other.
+    const owner = st.owner ? fit(shortName(st.owner), 84, 10.5, true) : ''
+    const ownerW = owner ? owner.length * 6.3 + 34 : 0
+    s += `<text x="${x + PAD + 110}" y="${ry + 12}" class="meta">${esc(fit(time, w - 2 * PAD - 110 - ownerW, 10.5, true))}</text>`
     if (st.owner) {
       const m = team.members.find(n => n.name === st.owner)
       s += avatar(m, st.owner, x + w - PAD - 9, ry + 8, 9)
-      s += `<text x="${x + w - PAD - 24}" y="${ry + 12}" class="meta" text-anchor="end">${esc(shortName(st.owner))}</text>`
+      s += `<text x="${x + w - PAD - 24}" y="${ry + 12}" class="meta" text-anchor="end">${esc(owner)}</text>`
       hits.push({ x, y: ry - 4, w, h: rowH, action: `who:${st.owner}` })
     }
     ry += rowH

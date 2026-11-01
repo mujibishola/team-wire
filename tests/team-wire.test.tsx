@@ -294,7 +294,7 @@ test('each step knows how long work queued there, and the longest queue is shade
   const card = dashboardSvg(team, 'factory', 'dark', { ...base, issue: 12 })
   expect(card).toContain('Open 1h10')
   expect(card).toContain('longest wait: Review 40m')
-  expect(card).toContain('10:01 → 10:30 · 29m')
+  expect(card).toContain('done 10:30 · 29m')
   const list = dashboardSvg(team, 'factory', 'dark', { ...base, stage: 'review' })
   expect(list).toContain('>ready 40m<')
 })
